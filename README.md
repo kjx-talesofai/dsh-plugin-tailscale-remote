@@ -15,7 +15,7 @@ Open your **DeepSeek Harness desktop Web UI** from your phone over **your own Ta
 
 **为什么做**：DSH 的 Web UI 只监听回环地址（`127.0.0.1`），这是对的——但它意味着手机天然连不上。Tailscale 已经把两台设备放进同一张虚拟网，缺的只是把 GUI 安全地桥过去：不开放公网、不做端口转发、服务端也不用改成监听 `0.0.0.0`。这个插件就是那座桥，加上一个开关、一个二维码和状态灯。
 
-**和官方手机端/其他远程方案的分工**：如果 DSH 之后有面向手机的官方体验，那才是为手机设计的产品（自带客户端、账号与云端通道），多数人应该用那个。这个插件做的是相反的取舍，也故意做窄：**不装 App、不注册账号、不经过任何中继**，手机侧只是一个浏览器标签页；代价是**必须有一台开着的、能跑 DSH 的桌面机**，并且这台机器和手机在同一个 tailnet 里。它是管道，不是产品。
+**和 [DeepSeek Harness Mobile](https://github.com/search?q=deepseek+harness+mobile) 的分工**：那是社区自研的**安卓客户端**——想给手机一个原生 App 的人应该用那个，体验是专门为手机做的。这个插件走的是相反的、也故意更窄的路：**手机侧不装任何东西**（就是一个浏览器标签页），不用注册账号、不经过任何中继，也不引入另一套会话管理；代价是**必须有一台开着的、能跑 DSH 的桌面机**，且它与手机在同一个 tailnet 里。它不是客户端，只是一座接入现有桌面实例的桥。
 
 **怎么装**（三种任选，在 DSH「添加插件」里填）：
 
@@ -60,6 +60,12 @@ That is all this plugin is. It is intentionally narrow:
 - **No new listener, no `0.0.0.0`.** The harness keeps binding loopback; `tailscale serve` terminates TLS and proxies to it.
 - **No account, no relay, no telemetry.** Traffic stays inside your tailnet (WireGuard). The plugin never sends anything anywhere.
 - **No persistent token.** The launch link carries a per-process token that is never written to disk; the panel shows it only inside the authenticated UI.
+
+### How this relates to a native client
+
+A community-built Android app, **DeepSeek Harness Mobile**, exists for people who want a real client on the phone: it is a purpose-built app with its own lifecycle and session handling, and if a native phone experience is what you are after, use that.
+
+This plugin deliberately takes the other trade. Nothing is installed on the phone beyond a browser tab, there is no account, no relay, and no second session store — but it only works while a desktop running DSH is awake and on the same tailnet. It is not a client; it is a thin bridge into the instance you already run.
 
 ## Install
 
