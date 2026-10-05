@@ -17,7 +17,7 @@ Open your **DeepSeek Harness desktop Web UI** from your phone over **your own Ta
 
 **和 [DeepSeek Harness Mobile](https://github.com/search?q=deepseek+harness+mobile) 的分工**：那是社区自研的**安卓客户端**——想给手机一个原生 App 的人应该用那个，体验是专门为手机做的。这个插件走的是相反的、也故意更窄的路：**手机侧不装任何东西**（就是一个浏览器标签页），不用注册账号、不经过任何中继，也不引入另一套会话管理；代价是**必须有一台开着的、能跑 DSH 的桌面机**，且它与手机在同一个 tailnet 里。它不是客户端，只是一座接入现有桌面实例的桥。
 
-**怎么装**（三种任选，在 DSH「添加插件」里填）：
+**怎么装**（在 DSH「添加插件」里填，**不需要 npm 账号、也无需发布**）：
 
 | 填入 | 形式 |
 |---|---|
@@ -75,7 +75,7 @@ github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.0   # GitHub, pinned to th
 /absolute/path/to/dsh-plugin-tailscale-remote             # local checkout (dev)
 ```
 
-> Not on npm yet: publishing to the registry is planned, after which the bare package name `dsh-plugin-tailscale-remote` works in the same dialog.
+> This plugin is **not published to the npm registry**, and does not need to be — the two spec forms above are all DSH requires. `npm pack` (in a checkout) produces a `.tgz` you can hand to someone else or point the dialog at with `file:/absolute/path.tgz`.
 
 CLI equivalent:
 
@@ -142,6 +142,8 @@ Verified end-to-end on **macOS (Apple Silicon) · DSH Desktop 0.2.0-rc.2 · Tail
 Not tested: Windows, Linux, and DSH versions other than 0.2.0-rc.2. The plugin leans on upstream behaviour (the `/api` trust fence, volatile plugin config, the client slot contract, `tailscale serve status --json`); the test suites below pin what it depends on, so run `npm test` first after a DSH upgrade.
 
 ## Development
+
+> The `npm` below is just the CLI bundled with Node — no account, nothing published.
 
 ```sh
 npm install          # esbuild + runtime deps
