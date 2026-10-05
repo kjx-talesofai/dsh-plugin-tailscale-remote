@@ -21,8 +21,7 @@ Open your **DeepSeek Harness desktop Web UI** from your phone over **your own Ta
 
 | 填入 | 形式 |
 |---|---|
-| npm 包名 | `dsh-plugin-tailscale-remote`（可加 `@0.2.0` 锁版本） |
-| GitHub | `github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.0` |
+| GitHub | `github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.0`（当前可用） |
 | 本地目录 | 绝对路径，例如 `/path/to/dsh-plugin-tailscale-remote` |
 
 装完**重启桌面端**（host 半边只在启动时加载）。没有别的步骤：hostname 由插件启动时自己探测并注册进 harness 的信任栅栏。
@@ -72,15 +71,16 @@ This plugin deliberately takes the other trade. Nothing is installed on the phon
 Use DSH's plugin install dialog (**Add plugin**) with any of these, then restart the desktop app:
 
 ```text
-dsh-plugin-tailscale-remote                              # npm registry (recommended)
-github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.0   # pinned GitHub release
+github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.0   # GitHub, pinned to this release
 /absolute/path/to/dsh-plugin-tailscale-remote             # local checkout (dev)
 ```
+
+> Not on npm yet: publishing to the registry is planned, after which the bare package name `dsh-plugin-tailscale-remote` works in the same dialog.
 
 CLI equivalent:
 
 ```sh
-dsh plugin --profile desktop add dsh-plugin-tailscale-remote
+dsh plugin --profile desktop add github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.0
 ```
 
 Anything machine-specific is discovered at runtime. If you prefer a **declarative** entry instead (a managed block in your profile's `cordis.patch.yml`), the package ships the installer:
