@@ -9,6 +9,7 @@ Open your **DeepSeek Harness desktop Web UI** from your phone over **your own Ta
 <p align="center">
   <a href="https://github.com/kjx-talesofai/dsh-plugin-tailscale-remote/releases"><img src="https://img.shields.io/github/v/release/kjx-talesofai/dsh-plugin-tailscale-remote?label=release&style=flat-square&color=blue" alt="release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/kjx-talesofai/dsh-plugin-tailscale-remote?label=license&style=flat-square&color=green" alt="license"></a>
+  <a href="https://github.com/kjx-talesofai/dsh-plugin-tailscale-remote/actions/workflows/ci.yml"><img src="https://github.com/kjx-talesofai/dsh-plugin-tailscale-remote/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/DSH-%E2%89%A5%200.2.0--rc.1-blueviolet?style=flat-square" alt="DSH >= 0.2.0-rc.1">
 </p>
 

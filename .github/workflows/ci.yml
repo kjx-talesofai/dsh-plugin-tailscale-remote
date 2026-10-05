@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # engines say ">=22"; 24 is included so a future runtime shift shows up here
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Committed artifacts must be current
+        # lib/ is committed so `github:` installs need no build step; this catches a
+        # stale artifact whenever src/ changes without a rebuild.
+        run: git diff --exit-code -- lib
+
+      - run: npm test
