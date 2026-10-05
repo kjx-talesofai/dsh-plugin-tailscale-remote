@@ -91,12 +91,6 @@ node ~/.dsh/profiles/desktop/node_modules/dsh-plugin-tailscale-remote/scripts/in
 
 Requires **DSH Desktop ≥ 0.2.0-rc.1** and **Tailscale** on both devices (see below).
 
-### Upgrading from an earlier name
-
-Before 0.2.0 this plugin was published as `dsh-tailscale-remote`. Renaming the package leaves **two rows with the same plugin id** in your profile patch — the old one (carrying your switch state) and the new one (created with defaults, i.e. *off*). The plugin binds to the row matching its **current package name**, so it looks switched off after the upgrade.
-
-Fix: uninstall the old entry and remove its stale row from `~/.dsh/profiles/<profile>/cordis.patch.yml` (keep the one whose `name` is `dsh-plugin-tailscale-remote`), then toggle the switch on. Renaming a published package is a one-time cost; a plain version bump has no such effect.
-
 ## Tailscale, in three steps
 
 For you — or for an agent configuring this on another machine:
