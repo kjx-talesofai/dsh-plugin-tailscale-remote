@@ -131,6 +131,7 @@ phone ──HTTPS──▶ Tailscale Serve ──▶ 127.0.0.1:<DSH port>   (har
 | Mapping | `tailscale serve --bg --https=<servePort> <local port>` |
 | Fence | the plugin registers its own tailnet authority at runtime (no profile edit needed) |
 | Pairing | one-time code (10 min, single use, same-site + rate-limited), because Chromium refuses to store a `SameSite=Strict` cookie set during an app-initiated redirect |
+| Remote settings | a tiny index-tap bootstrap declares an `ownsHost` transport, so config forms opened on the phone persist on the host instead of in page memory |
 | Diagnostics | `debug: true` in the plugin config registers an opt-in diag route and a marker-gated scan-path echo |
 
 ## Security
@@ -140,6 +141,7 @@ phone ──HTTPS──▶ Tailscale Serve ──▶ 127.0.0.1:<DSH port>   (har
 - **Token not persisted.** The per-process launch token lives in memory and is shown only through the authenticated panel; the saved session cookie is what survives.
 - **Fenced routes.** `/api/tailscale-remote.*` reuse the harness's own Host/Origin fence plus its session gate; when that gate is unavailable the plugin fails **closed** (503).
 - **Reversible transport.** Turning the switch off removes the mapping the plugin created — and only that one (`tailscale serve` is machine-global, so a foreign mapping is left alone).
+- **Host-backed settings for the authenticated remote page.** DSH keeps a page's config forms in page memory unless the page is loopback or its transport declares ownership, so the plugin injects a one-line transport bootstrap into the served index (before `__DSH_BOOT__`). It only declares ownership — the session gate and the Host/Origin fence still apply, and a transport the shell already provided is left untouched.
 - **Not reversible: the session.** Revoking the transport does not revoke an issued cookie; rotate `client-connection/browser-session` in `~/.dsh/.credentials.yaml` if you need that.
 
 ## Compatibility
