@@ -88,6 +88,7 @@ const probePort = probeServer.address().port
 
 // ---- stubbed cordis context ------------------------------------------------
 const routes = new Map()
+const taps = []
 const cleanups = []
 const connection = {
   trustedHosts: [],
@@ -106,6 +107,10 @@ const ctx = {
   webServer: {
     port: probePort,
     host: '127.0.0.1',
+    tapIndex: (transform) => {
+      taps.push(transform)
+      return () => {}
+    },
     register: (route) => {
       routes.set(route.path, route)
       return () => routes.delete(route.path)
@@ -175,6 +180,7 @@ const PAIR = '/tailscale-pair'
 
 // ---- load the built host module -------------------------------------------
 const module = await import(join(here, 'lib', 'index.js'))
+const { injectTransportBootstrap } = module
 check('host 模块导出 apply/Config/classifyTailnet', ['apply', 'Config', 'classifyTailnet'].every((k) => k in module))
 
 module.apply(ctx, {
@@ -194,6 +200,19 @@ check('注册了 status 路由', routes.has(STATUS))
 check('注册了 set 路由', routes.has(SET))
 check('注册了配对路由', routes.has(PAIR))
 check('debug 关闭时未注册诊断/回显路由', !routes.has('/api/tailscale-remote.diag') && !routes.has('/tailscale-probe'))
+
+// ---- remote transport bootstrap (host-backed settings on the phone) ---------
+check('注册了 webServer index-tap', taps.length === 1)
+const sampleHtml = '<html><head><meta charset="utf-8"></head><body><script>window.__DSH_BOOT__={}</script></body></html>'
+const tapped = taps[0](sampleHtml)
+check('首页被注入 transport 引导脚本', tapped.includes('__DSH_TRANSPORT__'))
+check(
+  '引导脚本在 __DSH_BOOT__ 之前执行',
+  tapped.indexOf('__DSH_TRANSPORT__') < tapped.indexOf('__DSH_BOOT__'),
+)
+check('引导脚本不覆盖 shell 已提供的 transport（有 guard）', tapped.includes('if(g.__DSH_TRANSPORT__)return;'))
+check('ownsHost 被声明为 true', /ownsHost:true/.test(tapped))
+check('无 <head> 的 HTML 原样返回', injectTransportBootstrap('<html></html>') === '<html></html>')
 
 // The plugin reconciles on boot after a short delay; wait for the observable effect
 // (its runtime trust registration) rather than guessing a duration.
