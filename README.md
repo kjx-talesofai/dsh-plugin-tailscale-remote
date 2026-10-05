@@ -6,6 +6,12 @@
 
 Open your **DeepSeek Harness desktop Web UI** from your phone over **your own Tailscale tailnet**. One switch creates a tailnet-only HTTPS mapping, shows a QR code, and the phone is in — no port forwarding, no reverse proxy, no public exposure.
 
+<p align="center">
+  <a href="https://github.com/kjx-talesofai/dsh-plugin-tailscale-remote/releases"><img src="https://img.shields.io/github/v/release/kjx-talesofai/dsh-plugin-tailscale-remote?label=release&style=flat-square&color=blue" alt="release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/kjx-talesofai/dsh-plugin-tailscale-remote?label=license&style=flat-square&color=green" alt="license"></a>
+  <img src="https://img.shields.io/badge/DSH-%E2%89%A5%200.2.0--rc.1-blueviolet?style=flat-square" alt="DSH >= 0.2.0-rc.1">
+</p>
+
 > dsh-plugin-tailscale-remote — 一个开关，把桌面端的 DSH 从你自己的手机打开
 
 <details>
