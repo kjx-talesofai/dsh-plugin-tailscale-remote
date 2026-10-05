@@ -1,0 +1,18 @@
+# dsh-plugin-tailscale-remote — bundle layer.
+#
+# One host row mounts the plugin package (dual-face: the same package also
+# declares `dsh.client`, so the harness serves its browser half into
+# window.__DSH_BOOT__ and renders the sidebar entry + panel).
+#
+# Machine-specific bits (the tailnet authority for the /api trust fence) are NOT
+# here: a published bundle must not carry one machine's hostname. The running
+# plugin registers the local authority itself; scripts/install.mjs can write it
+# declaratively into a profile patch instead, for people who prefer that.
+- insert:
+    - id: tailscale-remote
+      name: 'dsh-plugin-tailscale-remote'
+      config:
+        # Empty = discover from `tailscale status --json` (Self.DNSName).
+        hostname: ''
+        tailscaleBin: 'tailscale'
+        servePort: 443

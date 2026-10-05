@@ -1,0 +1,75 @@
+{
+  "name": "dsh-plugin-tailscale-remote",
+  "version": "0.2.0",
+  "type": "module",
+  "description": "Open your DeepSeek Harness desktop Web UI from your phone over your own Tailscale tailnet — one switch, no port forwarding, no public exposure.",
+  "license": "MIT",
+  "author": "Jiaxin Kou <https://hypersampling.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kjx-talesofai/dsh-plugin-tailscale-remote.git"
+  },
+  "homepage": "https://github.com/kjx-talesofai/dsh-plugin-tailscale-remote",
+  "bugs": {
+    "url": "https://github.com/kjx-talesofai/dsh-plugin-tailscale-remote/issues"
+  },
+  "icon": "./assets/icon.svg",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "assets",
+    "cordis.patch.yml",
+    "scripts/install.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "engines": {
+      "dsh": ">=0.2.0-rc.1 <0.3.0-0"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-primitives"
+      ]
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.4",
+    "qrcode-generator": "^2.0.4"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node tests/preflight.test.mjs && node tests/client.test.mjs && node tests/host.test.mjs"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "tailscale",
+    "remote-access"
+  ],
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

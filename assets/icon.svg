@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Tailscale remote access">
+  <rect x="0" y="0" width="64" height="64" rx="14" fill="#12151c"/>
+  <g fill="none" stroke="#f5f7fa" stroke-width="3.2" stroke-linecap="round">
+    <circle cx="30" cy="31" r="15"/>
+    <ellipse cx="30" cy="31" rx="6.5" ry="15"/>
+    <path d="M16.2 25.5h27.6M16.2 36.5h27.6"/>
+  </g>
+  <circle cx="49" cy="47" r="8.5" fill="#12151c"/>
+  <circle cx="49" cy="47" r="5.2" fill="#28c76f"/>
+</svg>
