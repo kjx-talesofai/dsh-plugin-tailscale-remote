@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-tailscale-remote",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "description": "Open your DeepSeek Harness desktop Web UI from your phone over your own Tailscale tailnet — one switch, no port forwarding, no public exposure.",
   "license": "MIT",
@@ -23,11 +23,13 @@
       "default": "./lib/client.js"
     },
     "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*": "./locale/*",
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
     "assets",
+    "locale",
     "cordis.patch.yml",
     "scripts/install.mjs",
     "README.md",

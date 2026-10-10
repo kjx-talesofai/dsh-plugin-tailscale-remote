@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Tailscale 远程访问",
+    "description": "用手机通过你自己的 Tailscale 网络（tailnet）打开这台电脑上的 DeepSeek Harness 桌面版 Web UI —— 一个开关，不用端口转发，也不暴露到公网。"
+  }
+}

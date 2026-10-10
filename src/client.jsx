@@ -1,5 +1,5 @@
 /**
- * dsh-tailscale-remote — browser half.
+ * dsh-plugin-tailscale-remote — browser half.
  *
  * Two slot contributions, mirroring the first-party `ui-schedule` shape:
  *   `sidebar.panellist` — the nav row (icon + status dot); `order: 5` seats it
@@ -13,11 +13,12 @@
  * authenticated, fenced surface the rest of the UI uses. Nothing is persisted
  * client-side, and the launch link never leaves the authenticated channel.
  *
- * @module dsh-tailscale-remote/client
+ * @module dsh-plugin-tailscale-remote/client
  */
 import * as React from 'react'
 import qrcode from 'qrcode-generator'
 import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
+import { NS, zh, en, fallbackT } from './locales.js'
 
 /** Tolerate any missing export: a half-versioned host must not blank the sidebar. */
 const Button = primitives.Button ?? ((props) => React.createElement('button', props))
@@ -38,8 +39,23 @@ const SET_URL = '/api/tailscale-remote.set'
 const POLL_MS = 2500
 const IDLE_POLL_MS = 15000
 
-/** Required client services. */
-export const inject = ['slots']
+/** Required client services: slots for the two contributions, locale for the copy. */
+export const inject = ['slots', 'locale']
+
+/**
+ * Every host failure code this build knows how to translate. Derived from the
+ * shipped English dictionary, which is the terminal fallback of every language
+ * chain — so a key that is present here is guaranteed to resolve, and a code
+ * added by a newer host simply falls back to the host's own `detail` text.
+ */
+const KNOWN_DETAIL_CODES = new Set(
+  Object.keys(en)
+    .filter((key) => key.startsWith('detail.'))
+    .map((key) => key.slice('detail.'.length)),
+)
+
+/** The framework hands `t` to a locale-declaring slot; a bare render may not have it. */
+const seat = (props) => (typeof props?.t === 'function' ? props.t : fallbackT)
 
 const muted = { opacity: 0.62 }
 const row = { display: 'flex', alignItems: 'center', gap: 10 }
@@ -108,7 +124,7 @@ class PanelBoundary extends React.Component {
       return React.createElement(
         'div',
         { style: { padding: 24, opacity: 0.8 } },
-        `Tailscale 面板渲染失败：${String(this.state.error)}`,
+        seat(this.props)('render.failed', { message: String(this.state.error) }),
       )
     }
     return this.props.children
@@ -122,6 +138,9 @@ const EMPTY = {
   link: '',
   port: 0,
   detail: '',
+  detailCode: '',
+  detailParams: {},
+  sessionOnly: false,
   updatedAt: '',
 }
 
@@ -132,11 +151,11 @@ function stateDotOf(state) {
   return 'idle'
 }
 
-function labelOf(state, enabled) {
-  if (state === 'on') return '已开启'
-  if (state === 'pending') return '正在启用…'
-  if (state === 'error') return '出错'
-  return enabled ? '已打开，等待同步…' : '已关闭'
+function labelOf(t, state, enabled) {
+  if (state === 'on') return t('state.on')
+  if (state === 'pending') return t('state.pending')
+  if (state === 'error') return t('state.error')
+  return enabled ? t('state.syncing') : t('state.off')
 }
 
 async function copyText(text) {
@@ -173,7 +192,7 @@ async function copyText(text) {
  * (`getSnapshot` / `subscribe`), which is what an injected `hooks.<name>` expects.
  */
 function createStatusSource() {
-  let snapshot = { loading: true, value: EMPTY, error: '' }
+  let snapshot = { loading: true, value: EMPTY, error: null }
   /** Poll cadence: fast while the panel is open, slow for the sidebar dot alone. */
   let cadence = IDLE_POLL_MS
   let timer = null
@@ -220,19 +239,23 @@ function createStatusSource() {
         cache: 'no-store',
       })
       if (response.status === 401 || response.status === 403) {
-        publish({ loading: false, value: EMPTY, error: '需要登录会话（请从带 token 的链接打开）' })
+        publish({ loading: false, value: EMPTY, error: { key: 'error.auth' } })
         return
       }
       if (!response.ok) {
-        publish({ loading: false, value: EMPTY, error: `HTTP ${String(response.status)}` })
+        publish({ loading: false, value: EMPTY, error: { key: 'error.http', params: { status: response.status } } })
         return
       }
       const value = await response.json()
       debugEnabled = value?.debug === true
       if (debugEnabled) flushDiag()
-      publish({ loading: false, value: { ...EMPTY, ...value }, error: '' })
+      publish({ loading: false, value: { ...EMPTY, ...value }, error: null })
     } catch (error) {
-      publish({ loading: false, value: snapshot.value, error: String(error?.message ?? error) })
+      publish({
+        loading: false,
+        value: snapshot.value,
+        error: { key: 'error.network', params: { message: String(error?.message ?? error) } },
+      })
     } finally {
       inFlight = false
     }
@@ -252,7 +275,7 @@ function createStatusSource() {
     },
     refresh,
     setEnabled: async (next) => {
-      publish({ ...snapshot, value: { ...snapshot.value, enabled: next }, error: '' })
+      publish({ ...snapshot, value: { ...snapshot.value, enabled: next }, error: null })
       const response = await fetch(SET_URL, {
         method: 'POST',
         credentials: 'same-origin',
@@ -260,13 +283,16 @@ function createStatusSource() {
         body: JSON.stringify({ enabled: next }),
       })
       if (!response.ok) {
-        publish({ ...snapshot, error: `切换失败：HTTP ${String(response.status)}` })
+        publish({
+          ...snapshot,
+          error: { key: 'error.toggleHttp', params: { status: response.status } },
+        })
         return
       }
       const value = await response.json()
       debugEnabled = value?.debug === true
       if (debugEnabled) flushDiag()
-      publish({ loading: false, value: { ...EMPTY, ...value }, error: '' })
+      publish({ loading: false, value: { ...EMPTY, ...value }, error: null })
     },
     /** The panel is a keyed slot: it unmounts when another panel is selected. */
     setActive(active) {
@@ -309,7 +335,7 @@ function PanelIcon({ size, statusSnapshot }) {
  * makes a phone camera fail. cellSize is computed from the symbol's module
  * count so the rendered code lands near `target` px with an integral cell.
  */
-function QrCode({ text, target = 240 }) {
+function QrCode({ text, target = 240, t = fallbackT }) {
   const rendered = React.useMemo(() => {
     try {
       const qr = qrcode(0, 'M')
@@ -332,7 +358,7 @@ function QrCode({ text, target = 240 }) {
     return React.createElement(
       'div',
       { style: { ...muted, fontSize: 12, maxWidth: 240 } },
-      '二维码生成失败，请刷新面板重试。',
+      t('qr.failed'),
     )
   }
   return React.createElement('div', {
@@ -355,7 +381,9 @@ function QrCode({ text, target = 240 }) {
  *   switch + status (one row) · one QR · the fallback link · a "?" disclosure.
  * The pairing code lives inside the QR only — the user scans it, they never type it.
  */
-function PanelPage({ statusSnapshot, onSetEnabled, onPanelActive }) {
+function PanelPage(props) {
+  const { statusSnapshot, onSetEnabled, onPanelActive } = props
+  const t = seat(props)
   const status = readStatus(statusSnapshot)
   const value = status?.value ?? EMPTY
   const enabled = value.enabled === true
@@ -366,10 +394,23 @@ function PanelPage({ statusSnapshot, onSetEnabled, onPanelActive }) {
   // HTTPS omits :443; a custom serve port must be visible, or the link looks broken.
   const servePort = Number(value.servePort ?? 443) || 443
   const portSuffix = servePort === 443 ? '' : `:${String(servePort)}`
+  /**
+   * A failure line: the host's own Chinese text is the fallback for any code this
+   * build does not ship a translation for (a newer host, an older client).
+   */
+  const detailCode = typeof value.detailCode === 'string' ? value.detailCode : ''
+  const detailText =
+    detailCode.length > 0 && KNOWN_DETAIL_CODES.has(detailCode)
+      ? t(`detail.${detailCode}`, value.detailParams ?? {})
+      : typeof value.detail === 'string'
+        ? value.detail
+        : ''
+  const detail = value.sessionOnly === true ? `${detailText}${t('detail.sessionOnly')}`.trim() : detailText
+  const requestError = status?.error
   const [copied, setCopied] = React.useState(false)
   const [showHelp, setShowHelp] = React.useState(false)
   const copyTimer = React.useRef(null)
-  /** Flash "已复制" briefly, then go back to "复制" so the button stays usable. */
+  /** Flash the "copied" label briefly, then go back to "copy" so the button stays usable. */
   const flashCopied = () => {
     setCopied(true)
     if (copyTimer.current !== null) clearTimeout(copyTimer.current)
@@ -437,13 +478,13 @@ function PanelPage({ statusSnapshot, onSetEnabled, onPanelActive }) {
     React.createElement(
       'div',
       { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 } },
-      React.createElement('h1', { style: { fontSize: 20, margin: 0 } }, 'Tailscale 远程访问'),
+      React.createElement('h1', { style: { fontSize: 20, margin: 0 } }, t('panel.title')),
       React.createElement(
         'button',
         {
           type: 'button',
-          title: '说明',
-          'aria-label': '说明',
+          title: t('panel.helpLabel'),
+          'aria-label': t('panel.helpLabel'),
           style: helpButton,
           onClick: () => setShowHelp((open) => !open),
         },
@@ -457,7 +498,7 @@ function PanelPage({ statusSnapshot, onSetEnabled, onPanelActive }) {
       React.createElement(Switch, {
         checked: enabled,
         disabled: state === 'pending',
-        label: '启用 Tailscale 远程访问',
+        label: t('switch.label'),
         onChange: (next) => {
           void Promise.resolve(onSetEnabled(next)).catch(() => {})
         },
@@ -466,7 +507,7 @@ function PanelPage({ statusSnapshot, onSetEnabled, onPanelActive }) {
       React.createElement(
         'span',
         { style: { fontSize: 14 } },
-        labelOf(state, enabled),
+        labelOf(t, state, enabled),
         hostname.length > 0
           ? React.createElement('span', { style: muted }, ` · ${hostname}${portSuffix}`)
           : null,
@@ -476,23 +517,19 @@ function PanelPage({ statusSnapshot, onSetEnabled, onPanelActive }) {
     pairUrl.length === 0 &&
       link.length === 0 &&
       state !== 'error' &&
-      React.createElement(
-        'p',
-        { style: { ...muted, fontSize: 13, marginTop: 4 } },
-        '打开开关后，这里会出现二维码：手机扫码 → 在打开的页面点一下即可进入。',
-      ),
+      React.createElement('p', { style: { ...muted, fontSize: 13, marginTop: 4 } }, t('hint.enable')),
 
     pairUrl.length > 0 &&
       React.createElement(
         'div',
         { style: { display: 'flex', gap: 22, alignItems: 'center', marginBottom: 20 } },
-        React.createElement(QrCode, { text: pairUrl, requireToken: false }),
+        React.createElement(QrCode, { text: pairUrl, requireToken: false, t }),
         React.createElement(
           'div',
           { style: { fontSize: 14, lineHeight: 1.8 } },
-          '手机扫码，',
+          t('qr.scan'),
           React.createElement('br'),
-          '在打开的页面点一下「进入 DSH」',
+          t('qr.enter'),
         ),
       ),
 
@@ -526,15 +563,19 @@ function PanelPage({ statusSnapshot, onSetEnabled, onPanelActive }) {
               })
             },
           },
-          copied ? '已复制' : '复制',
+          copied ? t('copy.copied') : t('copy.copy'),
         ),
       ),
 
     state === 'error' &&
-      typeof value.detail === 'string' &&
-      value.detail.length > 0 &&
-      React.createElement('p', { style: { color: '#d64545', fontSize: 13, marginBottom: 8 } }, value.detail),
-    status?.error && React.createElement('p', { style: { color: '#d64545', fontSize: 13 } }, status.error),
+      detail.length > 0 &&
+      React.createElement('p', { style: { color: '#d64545', fontSize: 13, marginBottom: 8 } }, detail),
+    requestError &&
+      React.createElement(
+        'p',
+        { style: { color: '#d64545', fontSize: 13 } },
+        t(requestError.key, requestError.params),
+      ),
 
     showHelp &&
       React.createElement(
@@ -550,10 +591,10 @@ function PanelPage({ statusSnapshot, onSetEnabled, onPanelActive }) {
           },
         },
         ...[
-          '前提：手机与 Mac 在同一个 Tailscale 网络（tailnet），手机上 Tailscale 保持在线。',
-          '用手机相机扫上面的二维码，在打开的页面点一下「进入 DSH」。',
-          `之后这个浏览器直接访问 https://${hostname.length > 0 ? hostname : '<tailnet 域名>'}${portSuffix}/ 即可，不必再扫码。`,
-          '关掉开关只撤销这个入口；已登录的设备 30 天内仍有效，重启本程序会换新 token。',
+          t('help.1'),
+          t('help.2'),
+          t('help.3', { host: `${hostname.length > 0 ? hostname : '<tailnet domain>'}${portSuffix}` }),
+          t('help.4'),
         ].map((text, index) =>
           React.createElement(
             'div',
@@ -568,11 +609,21 @@ function PanelPage({ statusSnapshot, onSetEnabled, onPanelActive }) {
 
 /**
  * Register both contributions.
+ *
+ * The copy rides the harness's own `locale` service rather than a private
+ * language flag: `locale: NS` on each registration hands the component the
+ * framework `t` seat, and the renderer subscribes every outlet to the locale
+ * revision — so flipping the language in Settings → General re-renders this
+ * panel in place, and the sidebar label re-resolves through the thunk below.
+ *
  * @param ctx - client root context.
  */
 export function apply(ctx) {
   diag('apply', JSON.stringify({ hasSlots: Boolean(ctx.slots), hasEffect: typeof ctx.effect }))
   try {
+    ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'tailscale-remote: dictionaries')
+    /** Live-bound: follows the active locale at call time (the sidebar re-resolves labels on change). */
+    const t = ctx.locale.bind(NS)
     const source = createStatusSource()
     const shared = { statusSnapshot: source.hooks.status }
 
@@ -582,7 +633,8 @@ export function apply(ctx) {
           name: 'sidebar.panellist',
           id: PANEL_ID,
           order: 5,
-          label: () => 'Tailscale 远程访问',
+          locale: NS,
+          label: () => t('panel.title'),
           inject: () => shared,
         },
         PanelIcon,
@@ -594,6 +646,7 @@ export function apply(ctx) {
         {
           name: 'main',
           key: PANEL_ID,
+          locale: NS,
           inject: () => ({
             ...shared,
             onSetEnabled: (next) => source.setEnabled(next),
@@ -601,7 +654,11 @@ export function apply(ctx) {
           }),
         },
         function BoundedPanelPage(props) {
-          return React.createElement(PanelBoundary, null, React.createElement(PanelPage, props))
+          return React.createElement(
+            PanelBoundary,
+            { t: seat(props) },
+            React.createElement(PanelPage, props),
+          )
         },
       ),
     )

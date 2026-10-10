@@ -35,6 +35,7 @@ const stateFile = join(workDir, 'serve-state.json')
 const fakeBin = join(workDir, 'tailscale')
 process.env.FAKE_TS_STATE = stateFile
 process.env.FAKE_TS_DOMAIN = DOMAIN
+process.env.FAKE_TS_BACKEND = 'Running'
 
 writeFileSync(
   fakeBin,
@@ -46,7 +47,7 @@ const domain = process.env.FAKE_TS_DOMAIN
 const load = () => { try { return JSON.parse(fs.readFileSync(stateFile, 'utf8')) } catch { return { port: null } } }
 const save = (s) => fs.writeFileSync(stateFile, JSON.stringify(s))
 const status = () => JSON.stringify({
-  BackendState: 'Running',
+  BackendState: process.env.FAKE_TS_BACKEND || 'Running',
   CertDomains: [domain],
   Health: [],
   MagicDNSSuffix: domain.split('.').slice(1).join('.'),
@@ -181,7 +182,17 @@ const PAIR = '/tailscale-pair'
 // ---- load the built host module -------------------------------------------
 const module = await import(join(here, 'lib', 'index.js'))
 const { injectTransportBootstrap } = module
-check('host 模块导出 apply/Config/classifyTailnet', ['apply', 'Config', 'classifyTailnet'].every((k) => k in module))
+check(
+  'host 模块导出 apply/Config/classifyTailnet/RemoteError',
+  ['apply', 'Config', 'classifyTailnet', 'RemoteError'].every((k) => k in module),
+)
+check(
+  'RemoteError 把语言无关的 code 与 params 分开携带',
+  (() => {
+    const failure = new module.RemoteError('demo.code', { value: 'x' }, '中文说明 x')
+    return failure.code === 'demo.code' && failure.params.value === 'x' && failure.message === '中文说明 x'
+  })(),
+)
 
 module.apply(ctx, {
   // volatile fields arrive as live references (config.get()); model that faithfully
@@ -241,6 +252,7 @@ check('status 载荷：servePort=443', payload.servePort === 443)
 check('status 载荷：tailnet.fence=added（运行期注入）', payload.tailnet?.fence === 'added', JSON.stringify(payload.tailnet))
 check('status 载荷：带 token 链接', typeof payload.link === 'string' && payload.link.includes('token='))
 check('status 载荷：一次性配对码存在', typeof payload.pairCode === 'string' && payload.pairCode.length > 0)
+check('status 载荷：detailCode/detailParams/sessionOnly 形状稳定', payload.detailCode === '' && typeof payload.detailParams === 'object' && payload.sessionOnly === false)
 
 connection.admit = () => ({ rejection: 401 })
 res = await call(STATUS, fakeRequest({ url: STATUS, headers: { host: '127.0.0.1:19387' } }))
@@ -305,6 +317,28 @@ check(
 res = await call(PAIR, fakeRequest({ url: `${PAIR}?c=BADCODE` }))
 check('配对页 GET（任意码）→ 200，不泄露码是否存在', res.statusCode === 200, `got ${res.statusCode}`)
 
+// The pairing page is served before any client bundle loads, so it cannot use the
+// locale service. It follows the phone's own `Accept-Language` instead.
+res = await call(PAIR, fakeRequest({ url: `${PAIR}?c=BADCODE`, headers: { 'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8' } }))
+check(
+  '配对页（Accept-Language: zh-CN）→ 中文',
+  res.body.includes('lang="zh-CN"') && res.body.includes('进入 DeepSeek Harness'),
+  'no zh page',
+)
+res = await call(PAIR, fakeRequest({ url: `${PAIR}?c=BADCODE`, headers: { 'accept-language': 'en-US,en;q=0.9' } }))
+check(
+  '配对页（Accept-Language: en-US）→ 英文',
+  res.body.includes('lang="en"') && res.body.includes('Enter DeepSeek Harness'),
+  'no en page',
+)
+res = await call(PAIR, fakeRequest({ url: `${PAIR}?c=BADCODE` }))
+check(
+  '配对页（无 Accept-Language）→ 英文兜底',
+  res.body.includes('lang="en"') && !/[\u4e00-\u9fff]/.test(res.body),
+  'expected an all-English page',
+)
+check('配对页仍把码带进表单', res.body.includes('value="BADCODE"'))
+
 res = await call(
   PAIR,
   fakeRequest({
@@ -362,6 +396,45 @@ check(
   typeof res.headers.location === 'string' && res.headers.location.includes('token='),
   String(res.headers.location),
 )
+
+// ---- host failures carry a language-neutral code ---------------------------
+// The panel localizes `detailCode`; the Chinese `detail` stays as the fallback
+// for a client that does not know the code yet.
+process.env.FAKE_TS_BACKEND = 'Stopped'
+await call(
+  SET,
+  fakeRequest({
+    method: 'POST',
+    url: SET,
+    headers: { host: '127.0.0.1:19387', 'content-type': 'application/json' },
+    body: JSON.stringify({ enabled: false }),
+  }),
+)
+await call(
+  SET,
+  fakeRequest({
+    method: 'POST',
+    url: SET,
+    headers: { host: '127.0.0.1:19387', 'content-type': 'application/json' },
+    body: JSON.stringify({ enabled: true }),
+  }),
+)
+const failedReconcile = await waitFor(async () => {
+  const probe = await call(STATUS, fakeRequest({ url: STATUS, headers: { host: '127.0.0.1:19387' } }))
+  try {
+    return JSON.parse(probe.body).state === 'error'
+  } catch {
+    return false
+  }
+})
+check('Tailscale 未运行 → state=error', failedReconcile)
+res = await call(STATUS, fakeRequest({ url: STATUS, headers: { host: '127.0.0.1:19387' } }))
+const failure = JSON.parse(res.body)
+check('失败载荷带语言无关的 detailCode', failure.detailCode === 'tailnet.stopped', `detailCode=${failure.detailCode}`)
+check('detailParams 保持对象形状', typeof failure.detailParams === 'object' && failure.detailParams !== null)
+check('失败时同时保留中文 detail（旧客户端/curl 的兜底）', typeof failure.detail === 'string' && failure.detail.length > 0)
+check('失败时清空链接与配对码', failure.link === '' && failure.pairCode === '' && failure.pairUrl === '')
+process.env.FAKE_TS_BACKEND = 'Running'
 
 // ---- cleanup ---------------------------------------------------------------
 for (const cleanup of cleanups) {

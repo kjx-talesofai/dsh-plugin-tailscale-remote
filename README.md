@@ -28,10 +28,12 @@ Open your **DeepSeek Harness desktop Web UI** from your phone over **your own Ta
 
 | 填入 | 形式 |
 |---|---|
-| GitHub | `github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.0`（当前可用） |
+| GitHub | `github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.2`（当前可用） |
 | 本地目录 | 绝对路径，例如 `/path/to/dsh-plugin-tailscale-remote` |
 
 装完**重启桌面端**（host 半边只在启动时加载）。没有别的步骤：hostname 由插件启动时自己探测并注册进 harness 的信任栅栏。
+
+**中英文**：侧栏名、面板、帮助文案都跟随 DSH 界面语言（设置 → 通用 → 语言）实时切换，不用重启；配对页按手机浏览器的 `Accept-Language` 选语言；插件在插件列表里的名字/描述也分中英文。
 
 **怎么用**：侧栏「Tailscale 远程访问」→ 打开开关 → 手机相机扫二维码 → 在打开的页面点一下「进入 DSH」。此后这台手机直接开 `https://<域名>/` 即可（会话 cookie 保留 30 天）。开关关掉 = 撤销那条映射。
 
@@ -78,7 +80,7 @@ This plugin deliberately takes the other trade. Nothing is installed on the phon
 Use DSH's plugin install dialog (**Add plugin**) with any of these, then restart the desktop app:
 
 ```text
-github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.0   # GitHub, pinned to this release
+github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.2   # GitHub, pinned to this release
 /absolute/path/to/dsh-plugin-tailscale-remote             # local checkout (dev)
 ```
 
@@ -87,7 +89,7 @@ github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.0   # GitHub, pinned to th
 CLI equivalent:
 
 ```sh
-dsh plugin --profile desktop add github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.0
+dsh plugin --profile desktop add github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.2
 ```
 
 Anything machine-specific is discovered at runtime. If you prefer a **declarative** entry instead (a managed block in your profile's `cordis.patch.yml`), the package ships the installer:
@@ -110,11 +112,15 @@ The plugin's preflight checks exactly these three things (including whether a ce
 
 ## Usage
 
-1. Sidebar → **Tailscale 远程访问** → turn the switch on. The panel shows status, one QR code, and the fallback link.
-2. Phone camera → scan → the pairing page opens → tap **进入 DSH**.
+1. Sidebar → **Tailscale Remote Access** → turn the switch on. The panel shows status, one QR code, and the fallback link.
+2. Phone camera → scan → the pairing page opens → tap **Enter DSH**.
 3. That browser now has a session (30 days). Open `https://<node>.<tailnet>.ts.net/` directly from then on.
 
 Turn the switch off to remove the mapping. On a custom `servePort` the URL carries the port (`https://<node>.<tailnet>.ts.net:8443/`); the panel shows it too.
+
+### Language
+
+The sidebar label, the panel, and the four-step help text ride the harness's own `locale` service, so they follow **Settings → General → Language** and switch in place — no reload, no restart, no separate language setting to keep in sync. The two pages you see *before* the client loads (pairing, expired code) cannot use that service, so they follow the phone browser's `Accept-Language` instead; the plugin's own name and description in the plugin list localize through `locale/en.json` + `locale/zh.json`.
 
 ### How it works
 
@@ -132,6 +138,7 @@ phone ──HTTPS──▶ Tailscale Serve ──▶ 127.0.0.1:<DSH port>   (har
 | Fence | the plugin registers its own tailnet authority at runtime (no profile edit needed) |
 | Pairing | one-time code (10 min, single use, same-site + rate-limited), because Chromium refuses to store a `SameSite=Strict` cookie set during an app-initiated redirect |
 | Remote settings | a tiny index-tap bootstrap declares an `ownsHost` transport, so config forms opened on the phone persist on the host instead of in page memory |
+| Language | the panel and the sidebar label register a `zh`/`en` dictionary with the harness `locale` service; host failures travel as a language-neutral `detailCode`, and the pre-client pairing pages read `Accept-Language` |
 | Diagnostics | `debug: true` in the plugin config registers an opt-in diag route and a marker-gated scan-path echo |
 
 ## Security
@@ -146,9 +153,11 @@ phone ──HTTPS──▶ Tailscale Serve ──▶ 127.0.0.1:<DSH port>   (har
 
 ## Compatibility
 
-Verified end-to-end on **macOS (Apple Silicon) · DSH Desktop 0.2.0-rc.2 · Tailscale 1.102.4**, with a real phone on the same tailnet. Platform modules in the app bundle: `dsh-client-connection`, `dsh-client-ui-primitives`, `dsh-host-frontend-static` at `0.2.0-rc.2`; `@deepseek-ai/cordis` `4.0.4`; `@deepseek-ai/schemastery` `3.18.4`.
+Verified end-to-end on **macOS (Apple Silicon) · DSH Desktop 0.2.0-rc.2 · Tailscale 1.102.4**, with a real phone on the same tailnet. Platform modules in the app bundle: `dsh-client-connection`, `dsh-client-locale`, `dsh-client-ui-primitives`, `dsh-host-frontend-static` at `0.2.0-rc.2`; `@deepseek-ai/cordis` `4.0.4`; `@deepseek-ai/schemastery` `3.18.4`.
 
-Not tested: Windows, Linux, and DSH versions other than 0.2.0-rc.2. The plugin leans on upstream behaviour (the `/api` trust fence, volatile plugin config, the client slot contract, `tailscale serve status --json`); the test suites below pin what it depends on, so run `npm test` first after a DSH upgrade.
+The browser half injects `slots` and `locale`, declares `locale: tailscale-remote` on both slot registrations, and registers that namespace's `zh`/`en` dictionaries. All three are ships-with-the-web-app services (`@deepseek-ai/dsh-client-locale` mounts `immediately`), so no extra install step is involved — but a composition that dropped the locale plugin would drop this plugin's UI with it.
+
+Not tested: Windows, Linux, and DSH versions other than 0.2.0-rc.2. The plugin leans on upstream behaviour (the `/api` trust fence, volatile plugin config, the client slot contract, the locale service, `tailscale serve status --json`); the test suites below pin what it depends on, so run `npm test` first after a DSH upgrade.
 
 ## Development
 
@@ -166,9 +175,11 @@ Repo layout — **sources vs artifacts**:
 |---|---|---|
 | `src/index.js` | host half (source) | ✗ (`lib/` is the build output) |
 | `src/client.jsx` | browser half (source) | ✗ |
+| `src/locales.js` | the `zh`/`en` dictionaries the client registers, and the copy an unseated render falls back to | ✗ |
 | `lib/index.js`, `lib/client.js` | built artifacts, committed so `github:` installs work without a build step | ✓ |
 | `cordis.patch.yml` | bundle layer: inserts this plugin's row | ✓ |
 | `assets/icon.svg` | plugin icon shown in DSH's plugin manager | ✓ |
+| `locale/en.json`, `locale/zh.json` | the plugin's own name/description in the plugin list, resolved by `dsh-app-boot` | ✓ |
 | `scripts/build.mjs` | build (esbuild wrapper + contract checks) | ✗ |
 | `scripts/install.mjs` | optional declarative installer (profile patch) | ✓ |
 | `tests/*.test.mjs` | preflight table · client smoke (real bundle in a stub DOM) · host smoke (stub cordis + fake `tailscale`) | ✗ |

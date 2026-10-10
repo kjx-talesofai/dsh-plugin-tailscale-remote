@@ -36,27 +36,32 @@ const cases = [
   {
     name: 'BackendState=NeedsLogin → 提示登录',
     status: { ...healthy(), BackendState: 'NeedsLogin' },
-    expect: { ok: false, match: /需要登录 Tailscale/ },
+    expect: { ok: false, match: /需要登录 Tailscale/, code: 'tailnet.needsLogin' },
   },
   {
     name: 'BackendState=Stopped → 提示打开客户端',
     status: { ...healthy(), BackendState: 'Stopped' },
-    expect: { ok: false, match: /未运行：请打开 Tailscale 客户端/ },
+    expect: { ok: false, match: /未运行：请打开 Tailscale 客户端/, code: 'tailnet.stopped' },
+  },
+  {
+    name: 'BackendState=NoState（未知）→ 归入 tailnet.unavailable 并带上原始值',
+    status: { ...healthy(), BackendState: 'NoState' },
+    expect: { ok: false, match: /BackendState=NoState/, code: 'tailnet.unavailable' },
   },
   {
     name: '未开启 HTTPS Certificates（CertDomains 不含本机域名）→ 明确提示',
     status: { ...healthy(), CertDomains: [] },
-    expect: { ok: false, match: /HTTPS Certificates/ },
+    expect: { ok: false, match: /HTTPS Certificates/, code: 'tailnet.noCertificate' },
   },
   {
     name: 'MagicDNS 关闭 → 明确提示（否则域名不解析）',
     status: { ...healthy(), CurrentTailnet: { MagicDNSEnabled: false } },
-    expect: { ok: false, match: /MagicDNS/ },
+    expect: { ok: false, match: /MagicDNS/, code: 'tailnet.magicDns' },
   },
   {
     name: 'Self.DNSName 为空 → 明确提示',
     status: { ...healthy(), Self: { DNSName: '' } },
-    expect: { ok: false, match: /未返回本机域名/ },
+    expect: { ok: false, match: /未返回本机域名/, code: 'tailnet.noDomain' },
   },
   {
     name: 'Health 有告警 → 仍通过，但把告警带出来（不致命）',
@@ -67,7 +72,7 @@ const cases = [
     name: 'hostname 覆盖非法（带协议/端口/路径）→ 拒绝',
     status: healthy(),
     options: { override: 'https://evil.example.com/' },
-    expect: { ok: false, match: /hostname 配置不合法/ },
+    expect: { ok: false, match: /hostname 配置不合法/, code: 'hostname.invalid' },
   },
   {
     name: 'hostname 覆盖合法且与证书匹配 → 采用覆盖值',
@@ -78,7 +83,7 @@ const cases = [
   {
     name: '域名含下划线（非法 authority）→ 拒绝',
     status: { ...healthy(), Self: { DNSName: 'bad_host.taila3698f.ts.net.' } },
-    expect: { ok: false, match: /hostname 配置不合法|tailnet 域名不合法/ },
+    expect: { ok: false, match: /hostname 配置不合法|tailnet 域名不合法/, code: 'tailnet.badDomain' },
   },
 ]
 
@@ -89,12 +94,14 @@ for (const testCase of cases) {
   try {
     outcome = { ok: true, value: classifyTailnet(testCase.status, testCase.options ?? { bin: 'tailscale' }) }
   } catch (error) {
-    outcome = { ok: false, message: String(error?.message ?? error) }
+    // `code` is what the browser half translates; `message` is the Chinese fallback.
+    outcome = { ok: false, message: String(error?.message ?? error), code: error?.code }
   }
 
   const expected = testCase.expect
   let ok = outcome.ok === expected.ok
   if (ok && expected.ok === false) ok = expected.match.test(outcome.message)
+  if (ok && expected.code !== undefined) ok = outcome.code === expected.code
   if (ok && expected.ok === true) {
     for (const [key, value] of Object.entries(expected)) {
       if (key === 'ok') continue
@@ -106,7 +113,7 @@ for (const testCase of cases) {
     }
   }
   if (!ok && failures.every((line) => !line.startsWith(testCase.name))) {
-    failures.push(`${testCase.name} → 期望 ok=${String(expected.ok)}${expected.match ? ` 且匹配 ${expected.match}` : ''}，实得 ${JSON.stringify(outcome)}`)
+    failures.push(`${testCase.name} → 期望 ok=${String(expected.ok)}${expected.match ? ` 且匹配 ${expected.match}` : ''}${expected.code ? ` 且 code=${expected.code}` : ''}，实得 ${JSON.stringify(outcome)}`)
   }
   if (ok) passed += 1
   console.log(`${ok ? '✅' : '❌'} ${testCase.name}`)

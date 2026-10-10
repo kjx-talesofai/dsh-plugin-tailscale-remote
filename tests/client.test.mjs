@@ -142,6 +142,26 @@ check('factory 返回 apply()', typeof module?.apply === 'function')
 
 // ---- fake host context ----------------------------------------------------
 const registrations = []
+/**
+ * A faithful stand-in for the harness `locale` service: `register(ns, {zh, en})`
+ * plus `bind(ns)`, which resolves against the ACTIVE locale at call time (the
+ * real one is a live closure over a mutable snapshot — that is exactly why the
+ * sidebar label and the panel follow a language switch without a reload).
+ */
+const dictionaries = new Map()
+let activeLocale = 'zh'
+const localeService = {
+  register: (ns, dict) => {
+    dictionaries.set(ns, dict)
+    return () => dictionaries.delete(ns)
+  },
+  bind: (ns) => (key, params) => {
+    const dict = dictionaries.get(ns) ?? {}
+    const template = dict[activeLocale]?.[key] ?? dict.en?.[key] ?? key
+    if (params === undefined) return template
+    return template.replace(/\{(\w+)\}/g, (match, name) => (name in params ? String(params[name]) : match))
+  },
+}
 const ctx = {
   slots: {
     inject: (_kind, contribute) => {
@@ -152,6 +172,7 @@ const ctx = {
       return () => {}
     },
   },
+  locale: localeService,
   effect: (effect) => {
     const cleanup = effect()
     if (typeof cleanup === 'function') cleanups.push(cleanup)
@@ -159,6 +180,10 @@ const ctx = {
   },
   logger: () => ({ info() {}, warn() {}, error() {} }),
 }
+
+const NS = 'tailscale-remote'
+/** The framework's `t` seat for our namespace, at the current test locale. */
+const t = () => localeService.bind(NS)
 
 try {
   module.apply(ctx)
@@ -172,6 +197,34 @@ const main = registrations.find((item) => item.descriptor.name === 'main')
 check('注册了 sidebar.panellist', panellist !== undefined)
 check('注册了 main 面板', main !== undefined)
 check('main 的 key 与 panellist 的 id 相同', main?.descriptor.key === panellist?.descriptor.id)
+check(`两个 slot 都声明了 locale 命名空间（${NS}）`, panellist?.descriptor.locale === NS && main?.descriptor.locale === NS)
+check('注册了 zh/en 词典', dictionaries.has(NS) && Boolean(dictionaries.get(NS).zh) && Boolean(dictionaries.get(NS).en))
+
+// The dictionaries must stay complete: the harness refuses a namespace that
+// misses a locale, and a missing key would surface as the raw key on screen.
+const zhKeys = Object.keys(dictionaries.get(NS)?.zh ?? {}).sort()
+const enKeys = Object.keys(dictionaries.get(NS)?.en ?? {}).sort()
+check(
+  `zh/en 词典 key 完全一致（各 ${zhKeys.length} 条）`,
+  zhKeys.length > 0 && JSON.stringify(zhKeys) === JSON.stringify(enKeys),
+)
+
+// Host failure codes are language-neutral; each one needs a translation here or
+// the panel silently falls back to the host's Chinese `detail`.
+const hostSource = readFileSync(join(here, '..', 'src', 'index.js'), 'utf8')
+const hostCodes = [...hostSource.matchAll(/new RemoteError\(\s*'([^']+)'/g)].map((match) => match[1])
+const missingCodes = hostCodes.filter((code) => !enKeys.includes(`detail.${code}`))
+check(
+  `host 的每个 RemoteError code 都有 detail.<code> 译文（${hostCodes.length} 个）`,
+  hostCodes.length > 0 && missingCodes.length === 0,
+)
+if (missingCodes.length > 0) console.log(`   [debug] 缺少译文：${missingCodes.join(', ')}`)
+
+// The sidebar label is a thunk re-resolved on every locale change.
+check('侧边栏在中文下显示中文名', panellist?.descriptor.label() === 'Tailscale 远程访问')
+activeLocale = 'en'
+check('侧边栏在英文下显示英文名', panellist?.descriptor.label() === 'Tailscale Remote Access')
+activeLocale = 'zh'
 
 /** Minimal renderer: walks the element tree, invoking function/class components. */
 function render(element) {
@@ -205,7 +258,7 @@ try {
 let injectProps = {}
 try {
   injectProps = main.descriptor.inject()
-  render(react.createElement(main.component, injectProps))
+  render(react.createElement(main.component, { ...injectProps, t: t() }))
   // Run the queued effects (mount) — this calls onPanelActive(true) -> setActive().
   for (const effect of effects.splice(0)) effect()
   check('渲染 main 面板并执行 mount effects 未抛错', true)
@@ -257,7 +310,7 @@ try {
     const kids = children ?? []
     for (const child of Array.isArray(kids) ? kids : [kids]) walkElements(child)
   }
-  walkElements(react.createElement(main.component, injectProps))
+  walkElements(react.createElement(main.component, { ...injectProps, t: t() }))
   const copyButton = buttons.at(-1)
   if (copyButton === undefined) console.log('   [debug] 见过的元素类型:', [...new Set(allTypes)].join(', '))
   check('渲染结果里存在复制按钮', copyButton !== undefined)
@@ -273,17 +326,13 @@ try {
   check(`点击复制按钮未抛错（实际：${error?.message ?? error}）`, false)
 }
 
-// The OFF layout must render too — the panel used to re-center itself when the
-// content shrank, which looked like a different screen.
-try {
-  const offSnapshot = {
-    subscribe: () => () => {},
-    getSnapshot: () => ({
-      loading: false,
-      value: { ...STATUS_PAYLOAD, enabled: false, state: 'off', link: '', pairUrl: '', pairCode: '', hostname: '' },
-      error: '',
-    }),
-  }
+/**
+ * Render the panel against one status snapshot and collect every string it
+ * produces. `locale` picks the dictionary the fake `t` seat resolves against, so
+ * one snapshot can be inspected in both shipped languages.
+ */
+function panelTexts(snapshot, locale = 'zh') {
+  activeLocale = locale
   const texts = []
   const collect = (node) => {
     if (node === null || node === undefined) return
@@ -309,58 +358,83 @@ try {
     }
     for (const child of Array.isArray(props?.children) ? props.children : [props?.children]) collect(child)
   }
-  collect(react.createElement(main.component, { statusSnapshot: offSnapshot, onSetEnabled: () => {}, onPanelActive: () => {} }))
-  check('关闭态渲染未抛错', true)
-  check('关闭态显示占位说明', texts.some((text) => typeof text === 'string' && text.includes('打开开关后')))
+  try {
+    collect(
+      react.createElement(main.component, {
+        statusSnapshot: snapshot,
+        onSetEnabled: () => {},
+        onPanelActive: () => {},
+        t: t(),
+      }),
+    )
+  } finally {
+    activeLocale = 'zh'
+  }
+  return texts
+}
+
+/** A status snapshot source with fixed contents. */
+const staticSnapshot = (value) => ({
+  subscribe: () => () => {},
+  getSnapshot: () => ({ loading: false, value: { ...STATUS_PAYLOAD, ...value }, error: null }),
+})
+
+// The OFF layout must render too — the panel used to re-center itself when the
+// content shrank, which looked like a different screen. It must also read in
+// whichever language the UI is in.
+try {
+  const off = staticSnapshot({ enabled: false, state: 'off', link: '', pairUrl: '', pairCode: '', hostname: '' })
+  const zhTexts = panelTexts(off, 'zh')
+  const enTexts = panelTexts(off, 'en')
+  check('关闭态渲染未抛错', zhTexts.length > 0 && enTexts.length > 0)
+  check('关闭态中文显示中文占位说明', zhTexts.some((text) => text.includes('打开开关后')))
+  check('关闭态英文显示英文占位说明', enTexts.some((text) => text.includes('Turn the switch on')))
+  check(
+    '英文界面下没有残留中文文案',
+    enTexts.some((text) => text.includes('Tailscale Remote Access')) &&
+      !enTexts.some((text) => /[\u4e00-\u9fff]/.test(text)),
+  )
+  check('中文界面下标题仍是中文', zhTexts.some((text) => text === 'Tailscale 远程访问'))
 } catch (error) {
-  check(`关闭态渲染未抛错（实际：${error?.message ?? error}）`, false)
+  check(`关闭态两种语言都能渲染（实际：${error?.message ?? error}）`, false)
+}
+
+// A host failure code renders in the ACTIVE language; a code this build does not
+// know falls back to the host's own `detail` rather than showing a raw key.
+try {
+  const coded = staticSnapshot({
+    enabled: true,
+    state: 'error',
+    detailCode: 'tailnet.magicDns',
+    detailParams: {},
+    detail: 'HOST-FALLBACK-TEXT',
+  })
+  check('错误码在中文下渲染中文说明', panelTexts(coded, 'zh').some((text) => text.includes('MagicDNS') && text.includes('管理台')))
+  check(
+    '错误码在英文下渲染英文说明',
+    panelTexts(coded, 'en').some((text) => text.includes('MagicDNS') && text.includes('admin console')),
+  )
+  const unknown = staticSnapshot({
+    enabled: true,
+    state: 'error',
+    detailCode: 'brand.new.code',
+    detail: 'HOST-FALLBACK-TEXT',
+  })
+  check('未知错误码回退到 host 原文', panelTexts(unknown, 'en').some((text) => text.includes('HOST-FALLBACK-TEXT')))
+} catch (error) {
+  check(`错误码渲染未抛错（实际：${error?.message ?? error}）`, false)
 }
 
 // A custom serve port must appear in the panel (and therefore in the QR/link the
 // host hands us) — otherwise a non-443 setup looks broken.
 try {
-  const customSnapshot = {
-    subscribe: () => () => {},
-    getSnapshot: () => ({
-      loading: false,
-      value: {
-        ...STATUS_PAYLOAD,
-        servePort: 8443,
-        link: 'https://jiaxin-mbpm2.taila3698f.ts.net:8443/?token=T',
-        pairUrl: 'https://jiaxin-mbpm2.taila3698f.ts.net:8443/tailscale-pair?c=ABCDEFGH',
-      },
-      error: '',
-    }),
-  }
-  const texts = []
-  const collectCustom = (node) => {
-    if (node === null || node === undefined) return
-    if (typeof node === 'string') {
-      texts.push(node)
-      return
-    }
-    if (Array.isArray(node)) {
-      for (const item of node) collectCustom(item)
-      return
-    }
-    if (typeof node !== 'object') return
-    const { type, props } = node
-    if (typeof type === 'function') {
-      if (type.prototype && typeof type.prototype.render === 'function') {
-        const instance = new type(props)
-        instance.props = props
-        collectCustom(instance.render())
-        return
-      }
-      collectCustom(type(props))
-      return
-    }
-    for (const child of Array.isArray(props?.children) ? props.children : [props?.children]) collectCustom(child)
-  }
-  collectCustom(
-    react.createElement(main.component, { statusSnapshot: customSnapshot, onSetEnabled: () => {}, onPanelActive: () => {} }),
-  )
-  check('自定义端口渲染未抛错', true)
+  const custom = staticSnapshot({
+    servePort: 8443,
+    link: 'https://jiaxin-mbpm2.taila3698f.ts.net:8443/?token=T',
+    pairUrl: 'https://jiaxin-mbpm2.taila3698f.ts.net:8443/tailscale-pair?c=ABCDEFGH',
+  })
+  const texts = panelTexts(custom, 'zh')
+  check('自定义端口渲染未抛错', texts.length > 0)
   check(
     '自定义端口出现在界面文案里（:8443）',
     texts.some((text) => typeof text === 'string' && text.includes(':8443')),
