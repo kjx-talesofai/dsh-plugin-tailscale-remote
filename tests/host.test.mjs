@@ -180,7 +180,11 @@ const SET = '/api/tailscale-remote.set'
 const PAIR = '/tailscale-pair'
 
 // ---- load the built host module -------------------------------------------
-const module = await import(join(here, 'lib', 'index.js'))
+// `HOST_BUNDLE` lets the same suite run against an INSTALLED copy
+// (`~/.dsh/profiles/<name>/node_modules/<pkg>/lib/index.js`), which is the only
+// way to prove that what a user actually has on disk behaves as tested.
+const hostBundle = process.env.HOST_BUNDLE ?? join(here, 'lib', 'index.js')
+const module = await import(hostBundle)
 const { injectTransportBootstrap } = module
 check(
   'host 模块导出 apply/Config/classifyTailnet/RemoteError',

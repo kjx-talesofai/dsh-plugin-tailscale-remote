@@ -28,7 +28,7 @@ Open your **DeepSeek Harness desktop Web UI** from your phone over **your own Ta
 
 | 填入 | 形式 |
 |---|---|
-| GitHub | `github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.2`（当前可用） |
+| GitHub | `github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.3`（当前可用） |
 | 本地目录 | 绝对路径，例如 `/path/to/dsh-plugin-tailscale-remote` |
 
 装完**重启桌面端**（host 半边只在启动时加载）。没有别的步骤：hostname 由插件启动时自己探测并注册进 harness 的信任栅栏。
@@ -80,7 +80,7 @@ This plugin deliberately takes the other trade. Nothing is installed on the phon
 Use DSH's plugin install dialog (**Add plugin**) with any of these, then restart the desktop app:
 
 ```text
-github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.2   # GitHub, pinned to this release
+github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.3   # GitHub, pinned to this release
 /absolute/path/to/dsh-plugin-tailscale-remote             # local checkout (dev)
 ```
 
@@ -89,14 +89,16 @@ github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.2   # GitHub, pinned to th
 CLI equivalent:
 
 ```sh
-dsh plugin --profile desktop add github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.2
+dsh plugin --profile desktop add github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.3
 ```
 
-Anything machine-specific is discovered at runtime. If you prefer a **declarative** entry instead (a managed block in your profile's `cordis.patch.yml`), the package ships the installer:
+Anything machine-specific is discovered at runtime. From a checkout (or from the installed package) the same install is one command — it shells out to the plugin manager, so it stays correct as the profile layout changes:
 
 ```sh
 node ~/.dsh/profiles/desktop/node_modules/dsh-plugin-tailscale-remote/scripts/install.mjs --profile desktop
 ```
+
+`--spec <spec>` installs something other than this package's own release, `--revert` removes it again, and `--dry-run` prints the command without running it. The script defaults to installing `github:<owner>/<repo>#v<its own version>`, derived from its `package.json`, so it can never install a different tag than the one it shipped in.
 
 Requires **DSH Desktop ≥ 0.2.0-rc.1** and **Tailscale** on both devices (see below).
 
@@ -166,7 +168,14 @@ Not tested: Windows, Linux, and DSH versions other than 0.2.0-rc.2. The plugin l
 ```sh
 npm install          # esbuild + runtime deps
 npm run build        # src/ → lib/   (the client half is inlined into the harness's lazy-CJS wrapper)
-npm test             # 3 suites: preflight decision table · client render/lifecycle · host routes + fence
+npm test             # 4 suites: preflight table · artifact/reference integrity · client render/lifecycle · host routes + fence
+```
+
+The client and host suites take an env override so they can run against an **installed** copy instead of the working tree — the only way to prove that what a user actually has on disk behaves as tested:
+
+```sh
+CLIENT_BUNDLE=~/.dsh/profiles/desktop/node_modules/dsh-plugin-tailscale-remote/lib/client.js node tests/client.test.mjs
+HOST_BUNDLE=~/.dsh/profiles/desktop/node_modules/dsh-plugin-tailscale-remote/lib/index.js     node tests/host.test.mjs
 ```
 
 Repo layout — **sources vs artifacts**:
@@ -181,8 +190,9 @@ Repo layout — **sources vs artifacts**:
 | `assets/icon.svg` | plugin icon shown in DSH's plugin manager | ✓ |
 | `locale/en.json`, `locale/zh.json` | the plugin's own name/description in the plugin list, resolved by `dsh-app-boot` | ✓ |
 | `scripts/build.mjs` | build (esbuild wrapper + contract checks) | ✗ |
-| `scripts/install.mjs` | optional declarative installer (profile patch) | ✓ |
-| `tests/*.test.mjs` | preflight table · client smoke (real bundle in a stub DOM) · host smoke (stub cordis + fake `tailscale`) | ✗ |
+| `scripts/install.mjs` | install into a DSH profile — a wrapper over `dsh plugin add/remove` (`--spec`, `--revert`, `--dry-run`) | ✓ |
+| `tests/artifacts.test.mjs` | path/reference drift guard: it is why the next broken `bundle/…`-style import cannot ship | ✗ |
+| `tests/*.test.mjs` | preflight table · artifact integrity · client smoke (real bundle in a stub DOM, both languages) · host smoke (stub cordis + fake `tailscale`) | ✗ |
 | `dist/` | `npm pack` output (git-ignored) | ✗ |
 
 ## Uninstall

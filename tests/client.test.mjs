@@ -421,6 +421,24 @@ try {
     detail: 'HOST-FALLBACK-TEXT',
   })
   check('未知错误码回退到 host 原文', panelTexts(unknown, 'en').some((text) => text.includes('HOST-FALLBACK-TEXT')))
+
+  // The exact case that was still Chinese on screen: an old host (no
+  // `detailCode`) sent this message verbatim. With the code present the panel
+  // must render the localized sentence instead — in both directions.
+  const stopped = staticSnapshot({
+    enabled: true,
+    state: 'error',
+    detailCode: 'tailnet.stopped',
+    detail: 'Tailscale 不可用（BackendState=Stopped）：未运行：请打开 Tailscale 客户端并连接',
+  })
+  check(
+    'BackendState=Stopped 在英文下译成英文整句',
+    panelTexts(stopped, 'en').some((text) => text === 'Tailscale is not running: open the Tailscale client and connect'),
+  )
+  check(
+    'BackendState=Stopped 在中文下译成中文整句',
+    panelTexts(stopped, 'zh').some((text) => text === 'Tailscale 未运行：请打开 Tailscale 客户端并连接'),
+  )
 } catch (error) {
   check(`错误码渲染未抛错（实际：${error?.message ?? error}）`, false)
 }
