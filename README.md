@@ -28,7 +28,7 @@ Open your **DeepSeek Harness desktop Web UI** from your phone over **your own Ta
 
 | 填入 | 形式 |
 |---|---|
-| GitHub | `github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.3`（当前可用） |
+| GitHub | `github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.4`（当前可用） |
 | 本地目录 | 绝对路径，例如 `/path/to/dsh-plugin-tailscale-remote` |
 
 装完**重启桌面端**（host 半边只在启动时加载）。没有别的步骤：hostname 由插件启动时自己探测并注册进 harness 的信任栅栏。
@@ -55,7 +55,7 @@ Open your **DeepSeek Harness desktop Web UI** from your phone over **your own Ta
 
 **卸载**：DSH「插件」列表里卸载 `dsh-plugin-tailscale-remote` → 重启。想连入口一起清掉，先在面板里关掉开关（它会撤销自己建立的那条 `tailscale serve` 映射）。
 
-**老实说（实测范围）**：只在 **macOS（Apple Silicon）+ DSH 0.2.0-rc.2 + Tailscale CLI 1.102.4** 上端到端跑过（真实手机扫码登录成功）。Windows / Linux 未测；DSH 升级后上游契约可能变化，见下方 Compatibility。
+**老实说（实测范围）**：只在 **macOS（Apple Silicon）+ DSH 0.2.0-rc.2 + Tailscale CLI 1.102.4** 上端到端跑过（真实手机扫码登录成功）；桌面端升到 **0.2.1-rc.2** 后重核了依赖面（平台模块版本、`cordis` / `schemastery` 版本、客户端 slot 契约），但**没有重新拿手机走一遍**。Windows / Linux 未测；DSH 升级后上游契约可能变化，见下方 Compatibility。
 
 </details>
 
@@ -80,7 +80,7 @@ This plugin deliberately takes the other trade. Nothing is installed on the phon
 Use DSH's plugin install dialog (**Add plugin**) with any of these, then restart the desktop app:
 
 ```text
-github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.3   # GitHub, pinned to this release
+github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.4   # GitHub, pinned to this release
 /absolute/path/to/dsh-plugin-tailscale-remote             # local checkout (dev)
 ```
 
@@ -89,7 +89,7 @@ github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.3   # GitHub, pinned to th
 CLI equivalent:
 
 ```sh
-dsh plugin --profile desktop add github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.3
+dsh plugin --profile desktop add github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.4
 ```
 
 Anything machine-specific is discovered at runtime. From a checkout (or from the installed package) the same install is one command — it shells out to the plugin manager, so it stays correct as the profile layout changes:
@@ -100,7 +100,7 @@ node ~/.dsh/profiles/desktop/node_modules/dsh-plugin-tailscale-remote/scripts/in
 
 `--spec <spec>` installs something other than this package's own release, `--revert` removes it again, and `--dry-run` prints the command without running it. The script defaults to installing `github:<owner>/<repo>#v<its own version>`, derived from its `package.json`, so it can never install a different tag than the one it shipped in.
 
-Requires **DSH Desktop ≥ 0.2.0-rc.1** and **Tailscale** on both devices (see below).
+Requires **DSH Desktop ≥ 0.2.0-rc.1, < 0.3.0** — declared as `engines.dsh`, which the harness checks before it imports a plugin — and **Tailscale** on both devices (see below).
 
 ## Tailscale, in three steps
 
@@ -155,11 +155,11 @@ phone ──HTTPS──▶ Tailscale Serve ──▶ 127.0.0.1:<DSH port>   (har
 
 ## Compatibility
 
-Verified end-to-end on **macOS (Apple Silicon) · DSH Desktop 0.2.0-rc.2 · Tailscale 1.102.4**, with a real phone on the same tailnet. Platform modules in the app bundle: `dsh-client-connection`, `dsh-client-locale`, `dsh-client-ui-primitives`, `dsh-host-frontend-static` at `0.2.0-rc.2`; `@deepseek-ai/cordis` `4.0.4`; `@deepseek-ai/schemastery` `3.18.4`.
+Verified end-to-end on **macOS (Apple Silicon) · DSH Desktop 0.2.0-rc.2 · Tailscale 1.102.4**, with a real phone on the same tailnet. Against the `0.2.1-rc.2` bundle the same dependencies read: `dsh-client-connection`, `dsh-client-locale`, `dsh-host-frontend-static` at `0.2.1-rc.2`, `@deepseek-ai/dsh-client-ui-primitives` at `0.2.1-rc.2` (served by the web app's module map, not from `dsh/node_modules`), `@deepseek-ai/cordis` `4.0.5`, `@deepseek-ai/schemastery` `3.18.5` — all still inside the ranges this package accepts.
 
 The browser half injects `slots` and `locale`, declares `locale: tailscale-remote` on both slot registrations, and registers that namespace's `zh`/`en` dictionaries. All three are ships-with-the-web-app services (`@deepseek-ai/dsh-client-locale` mounts `immediately`), so no extra install step is involved — but a composition that dropped the locale plugin would drop this plugin's UI with it.
 
-Not tested: Windows, Linux, and DSH versions other than 0.2.0-rc.2. The plugin leans on upstream behaviour (the `/api` trust fence, volatile plugin config, the client slot contract, the locale service, `tailscale serve status --json`); the test suites below pin what it depends on, so run `npm test` first after a DSH upgrade.
+Not tested: Windows, Linux, and DSH versions other than 0.2.0-rc.2 (on 0.2.1-rc.2 everything but the tailnet round-trip was re-checked). The plugin leans on upstream behaviour (the `/api` trust fence, volatile plugin config, the client slot contract, the locale service, `tailscale serve status --json`); the test suites below pin what it depends on, so run `npm test` first after a DSH upgrade.
 
 ## Development
 

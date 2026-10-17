@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-tailscale-remote",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "description": "Open your DeepSeek Harness desktop Web UI from your phone over your own Tailscale tailnet — one switch, no port forwarding, no public exposure.",
   "license": "MIT",
@@ -36,7 +36,8 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22",
+    "dsh": ">=0.2.0-rc.1 <0.3.0-0"
   },
   "dsh": {
     "manifestVersion": 1,
