@@ -22,6 +22,7 @@ import { execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { appendFile } from 'node:fs/promises'
 import { request } from 'node:http'
+import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -331,6 +332,27 @@ export function apply(ctx, config = {}) {
   }
 
   /**
+   * Is anything still listening on this loopback port?
+   *
+   * A mapping on our serve port whose target is gone is not a channel to protect:
+   * it is the leftover of a previous run, whose backend died with it. That is the
+   * difference between "somebody else is using 443" (refuse) and "we left 443
+   * pointing at a port this process used to own" (take it back).
+   */
+  async function portAlive(port) {
+    return await new Promise((done) => {
+      const socket = connect({ host: '127.0.0.1', port })
+      const finish = (alive) => {
+        socket.destroy()
+        done(alive)
+      }
+      socket.setTimeout(600, () => finish(false))
+      socket.once('connect', () => finish(true))
+      socket.once('error', () => finish(false))
+    })
+  }
+
+  /**
    * Is the root handler of OUR https port still proxying to \`port\`?
    * Parsed from \`serve status --json\` rather than the human-readable text, whose
    * column layout is not a contract (E2/F19).
@@ -574,15 +596,23 @@ export function apply(ctx, config = {}) {
         // (tailscale replaces the port's root handler). Refuse instead.
         const occupant = await rootTargetOnPort()
         if (occupant !== null && occupant !== `http://127.0.0.1:${String(port)}`) {
-          state = errorState(
-            new RemoteError(
-              'serve.portBusy',
-              { port: String(servePort), occupant },
-              `端口 ${String(servePort)} 已被另一条 serve 映射占用（→ ${occupant}）：已放弃覆盖。请改 servePort，或先移除该映射。`,
-            ),
-            { enabled: true, hostname },
-          )
-          return state
+          // Our own leftover looks identical to somebody else's mapping except in
+          // one respect: its target is dead. The OS-assigned port changes on every
+          // launch, so a forced quit always leaves exactly that shape behind.
+          const claimed = /^https?:\/\/(?:127\.0\.0\.1|localhost):(\d+)/.exec(occupant)
+          const alive = claimed === null ? true : await portAlive(Number(claimed[1]))
+          if (alive) {
+            state = errorState(
+              new RemoteError(
+                'serve.portBusy',
+                { port: String(servePort), occupant },
+                `端口 ${String(servePort)} 已被另一条 serve 映射占用（→ ${occupant}）：已放弃覆盖。请改 servePort，或先移除该映射。`,
+              ),
+              { enabled: true, hostname },
+            )
+            return state
+          }
+          log(`taking back serve port ${String(servePort)}: ${occupant} is no longer listening`)
         }
 
         const serveArgs =
@@ -1117,6 +1147,20 @@ main{max-width:420px}h1{font-size:19px;margin:0 0 8px}p{opacity:.75;font-size:14
     }, 1200)
     return () => {
       clearTimeout(timer)
+
+      // Best effort: a graceful quit should not leave a mapping pointing at a port
+      // this process is about to stop owning. A forced kill skips this, which is
+      // what the takeover above is for.
+      if (ownedPort !== null) {
+        const port = ownedPort
+        void (async () => {
+          try {
+            if (await ownsRootMapping(port)) await run(['serve', `--https=${String(servePort)}`, 'off'])
+          } catch (error) {
+            log('failed to remove the mapping on shutdown:', String(error?.message ?? error))
+          }
+        })()
+      }
     }
   }, 'tailscale-remote: reconcile on boot')
 }

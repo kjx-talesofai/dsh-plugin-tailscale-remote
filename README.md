@@ -28,7 +28,7 @@ Open your **DeepSeek Harness desktop Web UI** from your phone over **your own Ta
 
 | 填入 | 形式 |
 |---|---|
-| GitHub | `github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.4`（当前可用） |
+| GitHub | `github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.5`（当前可用） |
 | 本地目录 | 绝对路径，例如 `/path/to/dsh-plugin-tailscale-remote` |
 
 装完**重启桌面端**（host 半边只在启动时加载）。没有别的步骤：hostname 由插件启动时自己探测并注册进 harness 的信任栅栏。
@@ -80,7 +80,7 @@ This plugin deliberately takes the other trade. Nothing is installed on the phon
 Use DSH's plugin install dialog (**Add plugin**) with any of these, then restart the desktop app:
 
 ```text
-github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.4   # GitHub, pinned to this release
+github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.5   # GitHub, pinned to this release
 /absolute/path/to/dsh-plugin-tailscale-remote             # local checkout (dev)
 ```
 
@@ -89,7 +89,7 @@ github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.4   # GitHub, pinned to th
 CLI equivalent:
 
 ```sh
-dsh plugin --profile desktop add github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.4
+dsh plugin --profile desktop add github:kjx-talesofai/dsh-plugin-tailscale-remote#v0.2.5
 ```
 
 Anything machine-specific is discovered at runtime. From a checkout (or from the installed package) the same install is one command — it shells out to the plugin manager, so it stays correct as the profile layout changes:
